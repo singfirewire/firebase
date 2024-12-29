@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Firebase Phone Auth Test</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <style>
+        body { 
+            font-family: Arial; 
+            max-width: 500px; 
+            margin: 20px auto; 
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        input, button {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #4285f4;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #ccc;
+        }
+        #error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>ทดสอบ Firebase Phone Auth</h2>
+        <input type="tel" id="phone" placeholder="+66812345678">
+        <div id="recaptcha-container"></div>
+        <button onclick="sendOTP()">ส่งรหัส OTP</button>
+        <div id="otpDiv" style="display:none">
+            <input type="text" id="otp" placeholder="กรอกรหัส OTP">
+            <button onclick="verifyOTP()">ยืนยันรหัส</button>
+        </div>
+        <div id="error"></div>
+    </div>
+
+    <script>
+        // Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyA5cSnHaw6s1X1quiybFD_zq7vB4t1fIVQ",
+            authDomain: "eventcost-pro.firebaseapp.com",
+            projectId: "eventcost-pro",
+            storageBucket: "eventcost-pro.firestorage.app",
+            messagingSenderId: "114353067568",
+            appId: "1:114353067568:web:1b444a5cb44d0f73e8bff5"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        firebase.auth().languageCode = 'th';
+
+        let confirmationResult;
+
+        // Setup reCAPTCHA verifier
+        window.onload = function() {
+            window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+                'size': 'normal',
+                'callback': (response) => {
+                    // Enable button when reCAPTCHA is solved
+                    document.querySelector('button').disabled = false;
+                }
+            });
+            window.recaptchaVerifier.render();
+        }
+
+        function showError(msg) {
+            document.getElementById('error').textContent = msg;
+        }
+
+        async function sendOTP() {
+            const phoneNumber = document.getElementById('phone').value;
+            try {
+                confirmationResult = await firebase.auth().signInWithPhoneNumber(
+                    phoneNumber, 
+                    window.recaptchaVerifier
+                );
+                document.getElementById('otpDiv').style.display = 'block';
+                showError('ส่ง OTP แล้ว');
+            } catch (error) {
+                console.error(error);
+                showError('Error: ' + error.message);
+                // Reset reCAPTCHA
+                window.recaptchaVerifier.render().then(function(widgetId) {
+                    grecaptcha.reset(widgetId);
+                });
+            }
+        }
+
+        async function verifyOTP() {
+            const code = document.getElementById('otp').value;
+            try {
+                const result = await confirmationResult.confirm(code);
+                showError('เข้าสู่ระบบสำเร็จ! ' + result.user.phoneNumber);
+            } catch (error) {
+                showError('รหัส OTP ไม่ถูกต้อง');
+            }
+        }
+    </script>
+</body>
+</html>

@@ -7,7 +7,114 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.8.0/firebase-app-compat.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.8.0/firebase-database-compat.min.js"></script>
     <style>
-        /* ... สไตล์เดิม ... */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .delete-btn {
+            background-color: #f44336;
+        }
+
+        .delete-btn:hover {
+            background-color: #da190b;
+        }
+
+        .edit-btn {
+            background-color: #2196F3;
+        }
+
+        .edit-btn:hover {
+            background-color: #1976D2;
+        }
+
+        .cancel-btn {
+            background-color: #9e9e9e;
+        }
+
+        .cancel-btn:hover {
+            background-color: #757575;
+        }
+
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+
+        .item-list {
+            margin-top: 20px;
+        }
 
         .item {
             background-color: #f9f9f9;
@@ -15,8 +122,12 @@
             margin-bottom: 10px;
             border-radius: 4px;
             border: 1px solid #ddd;
-            cursor: move; /* เพิ่มเคอร์เซอร์แบบลาก */
+            cursor: move;
             position: relative;
+        }
+
+        .item.editing {
+            background-color: #fff3e0;
         }
 
         .item.dragging {
@@ -26,6 +137,22 @@
 
         .item.drag-over {
             border: 2px dashed #4CAF50;
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .timestamp {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .edit-mode {
+            margin-top: 10px;
         }
 
         .order-buttons {
@@ -91,9 +218,31 @@
     </div>
 
     <script>
-        // ... Firebase config และฟังก์ชันเดิม ...
+        // ตั้งค่า Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyA5c5nHaw6s1X1quiybFD_zq7vB4tIfIVQ",
+            authDomain: "eventcost-pro.firebaseapp.com",
+            databaseURL: "https://eventcost-pro-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "eventcost-pro",
+            storageBucket: "eventcost-pro.firebasestorage.app",
+            messagingSenderId: "114353067568",
+            appId: "1:114353067568:web:1b444a5cb44d0f73e8bff5"
+        };
 
-        // เพิ่มฟิลด์ order เมื่อเพิ่มข้อมูลใหม่
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        function showStatus(message, isError = false) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + (isError ? 'error' : 'success');
+            statusDiv.style.display = 'block';
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        // เขียนข้อมูลใหม่
         async function writeData() {
             const input = document.getElementById('inputData');
             const text = input.value.trim();
@@ -121,6 +270,64 @@
                 input.value = '';
             } catch (error) {
                 showStatus('เกิดข้อผิดพลาด: ' + error.message, true);
+            }
+        }
+
+        // เริ่มการแก้ไข
+        function startEdit(id, currentText) {
+            const itemDiv = document.getElementById(`item-${id}`);
+            itemDiv.classList.add('editing');
+            
+            const contentDiv = itemDiv.querySelector('.item-content');
+            contentDiv.innerHTML = `
+                <div class="edit-mode">
+                    <input type="text" id="edit-${id}" value="${currentText}" class="edit-input">
+                    <div class="button-group">
+                        <button onclick="saveEdit('${id}')">บันทึก</button>
+                        <button class="cancel-btn" onclick="cancelEdit('${id}', '${currentText}')">ยกเลิก</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // บันทึกการแก้ไข
+        async function saveEdit(id) {
+            const editInput = document.getElementById(`edit-${id}`);
+            const newText = editInput.value.trim();
+
+            if (!newText) {
+                showStatus('กรุณากรอกข้อความ', true);
+                return;
+            }
+
+            try {
+                await database.ref(`items/${id}`).update({
+                    text: newText,
+                    editedAt: firebase.database.ServerValue.TIMESTAMP
+                });
+                showStatus('แก้ไขข้อมูลสำเร็จ');
+            } catch (error) {
+                showStatus('เกิดข้อผิดพลาด: ' + error.message, true);
+            }
+        }
+
+        // ยกเลิกการแก้ไข
+        function cancelEdit(id, originalText) {
+            displaySingleItem(id, {
+                text: originalText
+            });
+        }
+
+        // ลบข้อมูล
+        function deleteData(id) {
+            if (confirm('ต้องการลบข้อมูลนี้ใช่หรือไม่?')) {
+                database.ref('items/' + id).remove()
+                    .then(() => {
+                        showStatus('ลบข้อมูลสำเร็จ');
+                    })
+                    .catch((error) => {
+                        showStatus('เกิดข้อผิดพลาด: ' + error.message, true);
+                    });
             }
         }
 
@@ -206,112 +413,4 @@
             itemDiv.addEventListener('dragleave', handleDragLeave);
         }
 
-        // อ่านและแสดงข้อมูลทั้งหมด
-        function displayData(snapshot) {
-            const dataList = document.getElementById('dataList');
-            dataList.innerHTML = '';
-            
-            // เรียงข้อมูลตาม order
-            const items = [];
-            snapshot.forEach((childSnapshot) => {
-                items.push({
-                    id: childSnapshot.key,
-                    ...childSnapshot.val()
-                });
-            });
-
-            items.sort((a, b) => (a.order || 0) - (b.order || 0));
-            
-            items.forEach((item, index) => {
-                const itemDiv = document.createElement('div');
-                itemDiv.className = 'item';
-                itemDiv.id = `item-${item.id}`;
-                dataList.appendChild(itemDiv);
-                
-                displaySingleItem(item.id, item, index === 0, index === items.length - 1);
-            });
-
-            if (items.length === 0) {
-                dataList.innerHTML = '<div style="text-align: center; color: #666;">ไม่มีข้อมูล</div>';
-            }
-        }
-
-        // ตัวแปรสำหรับเก็บข้อมูลการลาก
-        let draggedItem = null;
-
-        function handleDragStart(e) {
-            draggedItem = this;
-            this.classList.add('dragging');
-            e.dataTransfer.setData('text/plain', this.id);
-        }
-
-        function handleDragEnd(e) {
-            this.classList.remove('dragging');
-            document.querySelectorAll('.item').forEach(item => {
-                item.classList.remove('drag-over');
-            });
-        }
-
-        function handleDragOver(e) {
-            e.preventDefault();
-        }
-
-        function handleDragEnter(e) {
-            this.classList.add('drag-over');
-        }
-
-        function handleDragLeave(e) {
-            this.classList.remove('drag-over');
-        }
-
-        async function handleDrop(e) {
-            e.preventDefault();
-            this.classList.remove('drag-over');
-
-            const draggedId = draggedItem.id.replace('item-', '');
-            const droppedId = this.id.replace('item-', '');
-
-            if (draggedId !== droppedId) {
-                // หาค่า order ของรายการที่เกี่ยวข้อง
-                const snapshot = await database.ref('items').orderByChild('order').once('value');
-                const items = [];
-                snapshot.forEach(child => {
-                    items.push({ id: child.key, ...child.val() });
-                });
-                items.sort((a, b) => (a.order || 0) - (b.order || 0));
-
-                const draggedIndex = items.findIndex(item => item.id === draggedId);
-                const droppedIndex = items.findIndex(item => item.id === droppedId);
-
-                // คำนวณค่า order ใหม่
-                let newOrder;
-                if (draggedIndex < droppedIndex) {
-                    const nextItem = items[droppedIndex + 1];
-                    newOrder = nextItem 
-                        ? (items[droppedIndex].order + nextItem.order) / 2
-                        : items[droppedIndex].order + 1000;
-                } else {
-                    const prevItem = items[droppedIndex - 1];
-                    newOrder = prevItem
-                        ? (prevItem.order + items[droppedIndex].order) / 2
-                        : items[droppedIndex].order / 2;
-                }
-
-                await updateOrder(draggedId, newOrder);
-            }
-        }
-
-        // ติดตามการเปลี่ยนแปลงข้อมูล
-        database.ref('items').orderByChild('order').on('value', (snapshot) => {
-            displayData(snapshot);
-        });
-
-        // รับการกด Enter ในช่อง input
-        document.getElementById('inputData').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                writeData();
-            }
-        });
-    </script>
-</body>
-</html>
+        // อ่านและแสดงข้อมูลทั้ง

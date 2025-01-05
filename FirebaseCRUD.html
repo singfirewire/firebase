@@ -96,10 +96,16 @@
             color: white;
         }
         .move-btn {
-            padding: 6px 10px;
+            padding: 4px 8px; /* ปรับขนาด padding ให้เล็กลง */
             background: #757575;
             color: white;
-            font-size: 12px;
+            font-size: 12px; /* ปรับขนาดตัวอักษรให้เล็กลง */
+            border-radius: 4px; /* ปรับความโค้งของมุม */
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .move-btn:hover {
+            background: #555; /* สีเมื่อโฮเวอร์ */
         }
         .move-btn:disabled {
             opacity: 0.5;
@@ -230,6 +236,7 @@
                 showStatus('บันทึกข้อมูลสำเร็จ');
                 input.value = '';
                 input.focus();
+                displayData(); // เรียก displayData เพื่อแสดงข้อมูลใหม่ทันที
             } catch (error) {
                 showStatus('เกิดข้อผิดพลาด: ' + error.message, true);
             }

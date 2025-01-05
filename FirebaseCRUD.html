@@ -196,7 +196,6 @@
         const database = firebase.database();
 
         let draggedItem = null;
-        let items = [];
 
         function showStatus(message, isError = false) {
             const status = document.getElementById('status');
@@ -266,6 +265,7 @@
                     editedAt: firebase.database.ServerValue.TIMESTAMP
                 });
                 showStatus('แก้ไขข้อมูลสำเร็จ');
+                displayData(); // เรียก displayData หลังจากแก้ไขข้อมูลเสร็จ
             } catch (error) {
                 showStatus('เกิดข้อผิดพลาด: ' + error.message, true);
             }
@@ -276,6 +276,7 @@
                 try {
                     await database.ref('items/' + id).remove();
                     showStatus('ลบข้อมูลสำเร็จ');
+                    displayData(); // เรียก displayData หลังจากลบข้อมูลเสร็จ
                 } catch (error) {
                     showStatus('เกิดข้อผิดพลาด: ' + error.message, true);
                 }
@@ -296,7 +297,7 @@
         async function moveItem(id, direction) {
             try {
                 const snapshot = await database.ref('items').orderByChild('order').once('value');
-                items = [];
+                const items = [];
                 snapshot.forEach(child => {
                     items.push({ id: child.key, ...child.val() });
                 });
@@ -310,54 +311,79 @@
                         ? items[newIndex].order - 1
                         : items[newIndex].order + 1;
                     await updateOrder(id, newOrder);
+                    displayData(); // เรียก displayData หลังจากย้ายตำแหน่งเสร็จ
                 }
             } catch (error) {
                 showStatus('เกิดข้อผิดพลาด: ' + error.message, true);
             }
         }
 
-        async function handleDrop(e, targetId) {
-            e.preventDefault();
-            const draggedId = draggedItem.id.replace('item-', '');
-            
-            if (draggedId !== targetId) {
-                try {
-                    const snapshot = await database.ref('items').orderByChild('order').once('value');
-                    items = [];
-                    snapshot.forEach(child => {
-                        items.push({ id: child.key, ...child.val() });
-                    });
-                    items.sort((a, b) => a.order - b.order);
+        async function handleDropLogic(draggedId, targetId) {
+            try {
+                const snapshot = await database.ref('items').orderByChild('order').once('value');
+                const items = [];
+                snapshot.forEach(child => {
+                    items.push({ id: child.key, ...child.val() });
+                });
+                items.sort((a, b) => a.order - b.order);
 
-                    const draggedIndex = items.findIndex(item => item.id === draggedId);
-                    const targetIndex = items.findIndex(item => item.id === targetId);
-                    
-                    if (draggedIndex !== -1 && targetIndex !== -1) {
-                        const newOrder = targetIndex > draggedIndex
-                            ? items[targetIndex].order + 1
-                            : items[targetIndex].order - 1;
-                        await updateOrder(draggedId, newOrder);
-                    }
-                } catch (error) {
-                    showStatus('เกิดข้อผิดพลาด: ' + error.message, true);
+                const draggedIndex = items.findIndex(item => item.id === draggedId);
+                const targetIndex = items.findIndex(item => item.id === targetId);
+
+                if (draggedIndex !== -1 && targetIndex !== -1) {
+                    const newOrder = targetIndex > draggedIndex
+                        ? items[targetIndex].order + 1
+                        : items[targetIndex].order - 1;
+
+                    await database.ref(`items/${draggedId}`).update({ order: newOrder });
+                    displayData(); // เรียก displayData หลังจากอัปเดตข้อมูลเสร็จ
                 }
+            } catch (error) {
+                showStatus('เกิดข้อผิดพลาด: ' + error.message, true);
             }
-            document.querySelectorAll('.item').forEach(item => {
-                item.classList.remove('drag-over');
-            });
+        }
+
+        function handleDragStart(e) {
+            draggedItem = this;
+            setTimeout(() => this.classList.add('dragging'), 0);
+        }
+
+        function handleDragEnd() {
+            this.classList.remove('dragging');
+            draggedItem = null;
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            if (draggedItem !== this) {
+                this.classList.add('drag-over');
+            }
+        }
+
+        function handleDragLeave() {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const targetId = this.id.replace('item-', '');
+            if (draggedItem && draggedItem.id !== this.id) {
+                handleDropLogic(draggedItem.id.replace('item-', ''), targetId);
+            }
+            this.classList.remove('drag-over');
         }
 
         function displayData() {
             const dataList = document.getElementById('dataList');
-            dataList.innerHTML = '';
+            dataList.innerHTML = ''; // เคลียร์ข้อมูลเก่าก่อนแสดงใหม่
             
-            database.ref('items').orderByChild('order').on('value', snapshot => {
+            database.ref('items').orderByChild('order').once('value', snapshot => {
                 const items = [];
                 snapshot.forEach(child => {
                     items.push({ id: child.key, ...child.val() });
                 });
                 
-                items.sort((a, b) => a.order - b.order);
+                items.sort((a, b) => a.order - b.order); // เรียงลำดับตาม order
                 
                 items.forEach((data, index) => {
                     const div = document.createElement('div');
@@ -386,30 +412,13 @@
                         </div>
                     `;
 
-                    // Drag and Drop Event Listeners
-                    div.addEventListener('dragstart', () => {
-                        draggedItem = div;
-                        setTimeout(() => div.classList.add('dragging'), 0);
-                    });
-                    
-                    div.addEventListener('dragend', () => {
-                        div.classList.remove('dragging');
-                        draggedItem = null;
-                    });
-                    
-                    div.addEventListener('dragover', (e) => {
-                        e.preventDefault();
-                        if (draggedItem !== div) {
-                            div.classList.add('drag-over');
-                        }
-                    });
-                    
-                    div.addEventListener('dragleave', () => {
-                        div.classList.remove('drag-over');
-                    });
-                    
-                    div.addEventListener('drop', (e) => handleDrop(e, data.id));
-                    
+                    // เพิ่ม Event Listener สำหรับ Drag and Drop
+                    div.addEventListener('dragstart', handleDragStart);
+                    div.addEventListener('dragend', handleDragEnd);
+                    div.addEventListener('dragover', handleDragOver);
+                    div.addEventListener('dragleave', handleDragLeave);
+                    div.addEventListener('drop', handleDrop);
+
                     dataList.appendChild(div);
                 });
             });
